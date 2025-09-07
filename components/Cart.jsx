@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,72 +6,116 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const initialItems = [
-  {
-    id: '1',
-    name: 'Apple',
-    price: 30,
-    image: 'https://via.placeholder.com/80?text=Apple',
-  },
-  {
-    id: '2',
-    name: 'Banana',
-    price: 20,
-    image: 'https://via.placeholder.com/80?text=Banana',
-  },
-];
+const API_BASE = 'http://192.168.31.16:8000/api';
 
-export default function ExampleScreen() {
-  const [cartItems, setCartItems] = useState(initialItems);
-  const [quantities, setQuantities] = useState(
-    initialItems.reduce((acc, item) => {
-      acc[item.id] = 1;
-      return acc;
-    }, {})
-  );
+export default function Cart() {
+  const [cartData, setCartData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const increaseQuantity = (id) => {
-    setQuantities((prev) => ({
-      ...prev,
-      [id]: prev[id] + 1,
-    }));
+  const fetchCart = async () => {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) {
+        Alert.alert('Error', 'Please login first');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/cart/view/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCartData(data);
+      } else {
+        console.error('Failed to fetch cart');
+      }
+    } catch (error) {
+      console.error('Error fetching cart:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const decreaseQuantity = (id) => {
-    setQuantities((prev) => ({
-      ...prev,
-      [id]: Math.max(1, prev[id] - 1),
-    }));
+  const updateQuantity = async (cartItemId, newQuantity) => {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      const response = await fetch(`${API_BASE}/cart/update/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cart_item_id: cartItemId,
+          quantity: newQuantity,
+        }),
+      });
+
+      if (response.ok) {
+        fetchCart();
+      }
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+    }
   };
 
-  const removeFromCart = (id) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== id));
-    setQuantities((prev) => {
-      const newQuantities = { ...prev };
-      delete newQuantities[id];
-      return newQuantities;
-    });
+  const removeFromCart = async (cartItemId) => {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      const response = await fetch(`${API_BASE}/cart/remove/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cart_item_id: cartItemId }),
+      });
+
+      if (response.ok) {
+        fetchCart();
+      }
+    } catch (error) {
+      console.error('Error removing item:', error);
+    }
   };
+
+  useEffect(() => {
+    fetchCart();
+  }, []);
+
+  if (loading) {
+    return <ActivityIndicator size="large" color="#000" style={{ marginTop: 50 }} />;
+  }
 
   const renderItem = ({ item }) => (
     <View style={styles.item}>
-      <Image source={{ uri: item.image }} style={styles.image} />
+      <Image 
+        source={{ uri: item.product.image || 'https://via.placeholder.com/80' }} 
+        style={styles.image} 
+      />
       <View style={styles.itemInfo}>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.price}>₹{item.price}</Text>
+        <Text style={styles.name}>{item.product.name}</Text>
+        <Text style={styles.price}>₹{item.product.discounted_price}</Text>
         <View style={styles.quantityContainer}>
           <TouchableOpacity
             style={styles.quantityButton}
-            onPress={() => decreaseQuantity(item.id)}
+            onPress={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
           >
             <Text style={styles.quantityButtonText}>-</Text>
           </TouchableOpacity>
-          <Text style={styles.quantityText}>{quantities[item.id]}</Text>
+          <Text style={styles.quantityText}>{item.quantity}</Text>
           <TouchableOpacity
             style={styles.quantityButton}
-            onPress={() => increaseQuantity(item.id)}
+            onPress={() => updateQuantity(item.id, item.quantity + 1)}
           >
             <Text style={styles.quantityButtonText}>+</Text>
           </TouchableOpacity>
@@ -86,15 +130,15 @@ export default function ExampleScreen() {
     </View>
   );
 
-  const total = cartItems.reduce(
-    (sum, item) => sum + item.price * quantities[item.id],
+  const total = cartData?.items?.reduce(
+    (sum, item) => sum + (item.product.discounted_price * item.quantity),
     0
-  );
+  ) || 0;
 
   return (
     <FlatList
-      data={cartItems}
-      keyExtractor={(item) => item.id}
+      data={cartData?.items || []}
+      keyExtractor={(item) => item.id.toString()}
       renderItem={renderItem}
       ListHeaderComponent={
         <View style={styles.header}>

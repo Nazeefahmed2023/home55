@@ -5,7 +5,7 @@ export default function CategoryCard() {
   const [categories, setCategories] = useState([]);
 
   useEffect(() => {
-    fetch("http://192.168.31.16:8000/categories/")
+    fetch("http://192.168.31.16:8000/api/categories/")
       .then(response => response.json())
       .then(data => setCategories(data))
       .catch(error => console.error("❌ Error fetching categories:", error));

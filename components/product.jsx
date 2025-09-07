@@ -10,11 +10,11 @@ export default function ProductList() {
   const route = useRoute();
   const { subcategoryId } = route.params;
 
-  const backendUrl = 'http://192.168.31.239:8000'; // ✅ use your actual IP
+  const backendUrl = 'http://192.168.31.16:8000';
 
   useEffect(() => {
     axios
-      .get(`${backendUrl}/products/subcategory/${subcategoryId}/`)
+      .get(`${backendUrl}/api/products/${subcategoryId}/`)
       .then(response => setProducts(response.data))
       .catch(error => console.error('❌ Error fetching products:', error))
       .finally(() => setLoading(false));

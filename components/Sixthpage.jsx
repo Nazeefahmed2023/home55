@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,14 +6,126 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const API_BASE = 'http://192.168.31.16:8000/api';
 
 export default function DeliveryScreen() {
   const [selectedDate, setSelectedDate] = useState('03');
   const [selectedSlot, setSelectedSlot] = useState('Less than 45 mins');
-  const [paymentMethod, setPaymentMethod] = useState('Pay Online');
+  const [paymentMethod, setPaymentMethod] = useState('COD');
   const [instructions, setInstructions] = useState('');
+  const [addresses, setAddresses] = useState([]);
+  const [selectedAddress, setSelectedAddress] = useState(null);
+  const [cartTotal, setCartTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchAddresses();
+    fetchCartTotal();
+  }, []);
+
+  const fetchAddresses = async () => {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      const response = await fetch(`${API_BASE}/address/list/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAddresses(data);
+        if (data.length > 0) setSelectedAddress(data[0].id);
+      }
+    } catch (error) {
+      console.error('Error fetching addresses:', error);
+    }
+  };
+
+  const fetchCartTotal = async () => {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      const response = await fetch(`${API_BASE}/cart/view/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const total = data.items?.reduce(
+          (sum, item) => sum + (item.product.discounted_price * item.quantity),
+          0
+        ) || 0;
+        setCartTotal(total);
+      }
+    } catch (error) {
+      console.error('Error fetching cart:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCheckout = async () => {
+    if (!selectedAddress) {
+      Alert.alert('Error', 'Please select an address');
+      return;
+    }
+
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      
+      // Create order
+      const orderResponse = await fetch(`${API_BASE}/checkout/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          address_id: selectedAddress,
+        }),
+      });
+
+      if (orderResponse.ok) {
+        const orderData = await orderResponse.json();
+        
+        // Process payment
+        const paymentResponse = await fetch(`${API_BASE}/payment/`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            order_id: orderData.order_id,
+            payment_method: paymentMethod,
+          }),
+        });
+
+        if (paymentResponse.ok) {
+          Alert.alert('Success', 'Order placed successfully!');
+        } else {
+          Alert.alert('Error', 'Payment failed');
+        }
+      } else {
+        Alert.alert('Error', 'Failed to create order');
+      }
+    } catch (error) {
+      console.error('Error during checkout:', error);
+      Alert.alert('Error', 'Something went wrong');
+    }
+  };
+
+  if (loading) {
+    return <ActivityIndicator size="large" color="#00A86B" style={{ marginTop: 50 }} />;
+  }
 
   const slots = ['Less than 45 mins', '10:00 – 01:00 AM', '02:00 – 04:00 PM', '04:00 – 06:00 PM'];
 
@@ -21,11 +133,17 @@ export default function DeliveryScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.header}>Address & Slot</Text>
 
-      <View style={styles.addressContainer}>
-        <Icon name="location-outline" size={20} color="#00A86B" />
-        <Text style={styles.addressLabel}>Home</Text>
-        <Text style={styles.addressText}>No 2, 7th floor, Mantri DSK Pinnacle, Cave Temple R...</Text>
-      </View>
+      {addresses.length > 0 ? (
+        <View style={styles.addressContainer}>
+          <Icon name="location-outline" size={20} color="#00A86B" />
+          <Text style={styles.addressLabel}>Selected Address</Text>
+          <Text style={styles.addressText}>
+            {addresses.find(addr => addr.id === selectedAddress)?.full_address || 'No address selected'}
+          </Text>
+        </View>
+      ) : (
+        <Text style={styles.noAddress}>No addresses found. Please add an address first.</Text>
+      )}
 
       <Text style={styles.sectionTitle}>When do you want the delivery?</Text>
 
@@ -73,22 +191,22 @@ export default function DeliveryScreen() {
       <Text style={styles.sectionTitle}>Payment method</Text>
       <View style={styles.paymentContainer}>
         <TouchableOpacity
-          style={[styles.paymentButton, paymentMethod === 'Pay Online' && styles.paymentSelected]}
-          onPress={() => setPaymentMethod('Pay Online')}
+          style={[styles.paymentButton, paymentMethod === 'Online' && styles.paymentSelected]}
+          onPress={() => setPaymentMethod('Online')}
         >
           <Text style={styles.paymentText}>Pay Online</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.paymentButton, paymentMethod === 'Cash on Delivery' && styles.paymentSelected]}
-          onPress={() => setPaymentMethod('Cash on Delivery')}
+          style={[styles.paymentButton, paymentMethod === 'COD' && styles.paymentSelected]}
+          onPress={() => setPaymentMethod('COD')}
         >
           <Text style={styles.paymentText}>Cash on Delivery</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.total}>Total: ₹150</Text>
-        <TouchableOpacity style={styles.checkoutButton}>
+        <Text style={styles.total}>Total: ₹{cartTotal}</Text>
+        <TouchableOpacity style={styles.checkoutButton} onPress={handleCheckout}>
           <Text style={styles.checkoutText}>Checkout</Text>
         </TouchableOpacity>
       </View>
@@ -226,5 +344,11 @@ const styles = StyleSheet.create({
   checkoutText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  noAddress: {
+    textAlign: 'center',
+    color: '#999',
+    fontStyle: 'italic',
+    marginBottom: 20,
   },
 });

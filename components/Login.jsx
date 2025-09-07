@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Button, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -17,19 +18,23 @@ export default function LoginScreen() {
         console.log("Login Payload:", { email, password });
 
         try {
-            const response = await fetch('http://192.168.31.16:8000/api/accounts/login/', {
+            const response = await fetch('http://192.168.31.16:8000/api/auth/login/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({ username: email, password }),
             });
 
             const data = await response.json();
             console.log("Response:", data);
 
             if (response.status === 200) {
+                // Store tokens
+                await AsyncStorage.setItem('access_token', data.access_token);
+                await AsyncStorage.setItem('refresh_token', data.refresh_token);
+                await AsyncStorage.setItem('user_id', data.user_id.toString());
+                
                 Alert.alert('Success', 'Logged in successfully!');
-                // Correct way to navigate with Expo Router
-                router.replace('/HomeScreen');
+                router.replace('/home');
             } else if (response.status === 400) {
                 Alert.alert('Login Failed', data.error || 'Invalid credentials');
             } else {

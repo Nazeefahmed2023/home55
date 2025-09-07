@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,24 +7,70 @@ import {
   TouchableOpacity,
   FlatList,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const API_BASE = 'http://192.168.31.16:8000/api';
 const categories = ['Fruits', 'Vegetables', 'Exotics', 'Freshly'];
 
-const products = [
-  {
-    id: '1',
-    name: 'Fresh Onion',
-    weight: '1 kg',
-    discount: '23%',
-    price: 39,
-    originalPrice: 42,
-    image: require('../assets/pyaaz.jpg'), // Replace with your image path
-  },
-];
-
 export default function ProductListScreen() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/products/`);
+      if (response.ok) {
+        const data = await response.json();
+        setProducts(data);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addToCart = async (productId) => {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) {
+        Alert.alert('Error', 'Please login first');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/cart/add/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          product: productId,
+          quantity: 1,
+        }),
+      });
+
+      if (response.ok) {
+        Alert.alert('Success', 'Item added to cart!');
+      } else {
+        Alert.alert('Error', 'Failed to add item to cart');
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+    }
+  };
+
+  if (loading) {
+    return <ActivityIndicator size="large" color="#000" style={{ marginTop: 50 }} />;
+  }
   return (
     <ScrollView style={styles.container}>
       {/* Banner */}
@@ -60,35 +106,44 @@ export default function ProductListScreen() {
       </View>
 
       {/* Product List */}
-      <Text style={styles.productCount}>12 Products</Text>
+      <Text style={styles.productCount}>{products.length} Products</Text>
 
       {products.map((item) => (
         <View key={item.id} style={styles.productCard}>
           {/* Discount Badge */}
-          <View style={styles.discountBadge}>
-            <Text style={styles.discountText}>{item.discount} off</Text>
-          </View>
+          {item.discount_percentage > 0 && (
+            <View style={styles.discountBadge}>
+              <Text style={styles.discountText}>{item.discount_percentage}% off</Text>
+            </View>
+          )}
 
           {/* Product Image */}
-          <Image source={item.image} style={styles.productImage} />
+          <Image 
+            source={{ uri: item.image || 'https://via.placeholder.com/80' }} 
+            style={styles.productImage} 
+          />
 
           {/* Product Details */}
           <View style={styles.details}>
             <Text style={styles.productName}>{item.name}</Text>
+            <Text style={styles.productWeight}>{item.description || 'Fresh product'}</Text>
             <View style={styles.rowBetween}>
-              <Text style={styles.productWeight}>{item.weight}</Text>
-              <Ionicons name="chevron-down" size={16} color="gray" />
-            </View>
-            <View style={styles.rowBetween}>
-              <Text style={styles.price}>₹{item.price} <Text style={styles.originalPrice}>₹{item.originalPrice}</Text></Text>
-              <TouchableOpacity style={styles.addButton}>
+              <Text style={styles.price}>
+                ₹{item.discounted_price} 
+                {item.discount_percentage > 0 && (
+                  <Text style={styles.originalPrice}> ₹{item.price}</Text>
+                )}
+              </Text>
+              <TouchableOpacity 
+                style={styles.addButton}
+                onPress={() => addToCart(item.id)}
+              >
                 <Ionicons name="add" size={18} color="#2ecc71" />
                 <Text style={styles.addText}>ADD</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
-        
       ))}
     </ScrollView>
   );
