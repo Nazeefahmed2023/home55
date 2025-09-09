@@ -48,3 +48,48 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+this is the front end code and i want it to work with the backend code together 
+the pages should go as follows which are 
+
+
+home page-->category page --> product page --> product detail page --> view cart page --> checkout page --> payment page -->order placed page --> order summary page --> order history page 
